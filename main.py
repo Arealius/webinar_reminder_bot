@@ -1,33 +1,39 @@
-import telebot
-from telebot import types
+import os
+import re
 import time
-from datetime import datetime, timedelta
+import logging
+from telebot import TeleBot, types
 from apscheduler.schedulers.background import BackgroundScheduler
-from database_config import get_db_cursor, API_TOKEN
+from database_config import mydb, api_token
 
-bot = telebot.TeleBot(API_TOKEN)
-scheduler = BackgroundScheduler()
-scheduler.start()
+bot = TeleBot(api_token)
 
-WEBINAR_TIME = datetime(2025, 4, 13, 20, 0)  # Установи своё время
+def get_db_cursor():
+    connection = mydb
+    return connection, connection.cursor(buffered=True)
 
 @bot.message_handler(commands=['start'])
-def start(message):
+def send_welcome(message):
     conn, cursor = get_db_cursor()
-    cursor.execute("SELECT * FROM users WHERE chat_id = %s", (message.chat.id,))
-    if not cursor.fetchone():
-        cursor.execute("INSERT INTO users (chat_id) VALUES (%s)", (message.chat.id,))
-        conn.commit()
-        bot.send_message(message.chat.id, "Вы зарегистрированы на вебинар!")
-        schedule_reminder(message.chat.id)
-    else:
-        bot.send_message(message.chat.id, "Вы уже зарегистрированы.")
-    cursor.close()
+    user_id = message.from_user.id
+    username = message.from_user.username or ""
+    
+    cursor.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON DUPLICATE KEY UPDATE username=%s", (user_id, username, username))
+    conn.commit()
+    bot.reply_to(message, "✅ You are registered for the webinar!")
+
+# Пример уведомления (можно адаптировать под время вебинара)
+def send_reminders():
+    conn, cursor = get_db_cursor()
+    cursor.execute("SELECT user_id FROM users")
+    for (user_id,) in cursor.fetchall():
+        bot.send_message(user_id, "⏰ Reminder: The webinar starts in 30 minutes!")
     conn.close()
 
-def schedule_reminder(chat_id):
-    reminder_time = WEBINAR_TIME - timedelta(minutes=30)
-    scheduler.add_job(lambda: bot.send_message(chat_id, "⏰ Напоминание: вебинар начнётся через 30 минут!"),
-                      trigger='date', run_date=reminder_time)
+# Планировщик уведомлений (можно настроить на нужное время)
+scheduler = BackgroundScheduler()
+# scheduler.add_job(send_reminders, 'date', run_date='2025-04-13 18:00:00')  # Пример
+scheduler.start()
 
-bot.polling()
+# ВАЖНО: запуск бота
+bot.infinity_polling()
