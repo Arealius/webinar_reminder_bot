@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import re
 from database_config import get_db_cursor, API_TOKEN
 
-API_TOKEN = api_token
 
 categories = {
     "Birthday": 1,
