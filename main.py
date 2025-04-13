@@ -1,14 +1,20 @@
 import os
 from requests import get
 import logging
-import time
 import telebot
+import matplotlib.pyplot as plt
 from telebot import types
 import mysql.connector
-import matplotlib.pyplot as plt
+from apscheduler.schedulers.background import BackgroundScheduler
 import re
 from database_config import get_db_cursor, API_TOKEN
 
+bot = telebot.TeleBot(API_TOKEN)
+
+# ✅ Добавляем обработчик /start
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    bot.send_message(message.chat.id, "Привет! Ты успешно запустил бота. 🔔 Зарегистрируйся на вебинар!")
 
 categories = {
     "Birthday": 1,
@@ -18,39 +24,23 @@ categories = {
     "Other": 5
 }
 
-categoryId = 0
-date = ''
-time_string = ''
-reminder_text = ''
-user_id = 0
+def reminder_text(event_name, event_time):
+    return f"🔔 Напоминание: {event_name} запланировано на {event_time}"
 
-bot = telebot.TeleBot(API_TOKEN)
-
-@bot.message_handler(commands=['start'])
-def Send_Welcome(message):
-    global user_id
-    user_id = message.chat.id
+def send_reminders():
     conn, cursor = get_db_cursor()
-
-    username = message.chat.username or ""
-
-    query = """
-        INSERT INTO users (user_id, username)
-        VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE username=%s
-    """
-    val = (user_id, username, username)
-    cursor.execute(query, val)
+    cursor.execute("SELECT user_id, event_name, event_time FROM reminders WHERE notified = 0")
+    reminders = cursor.fetchall()
+    for user_id, event_name, event_time in reminders:
+        text = reminder_text(event_name, event_time)
+        bot.send_message(user_id, text)
+        cursor.execute("UPDATE reminders SET notified = 1 WHERE user_id = %s AND event_name = %s", (user_id, event_name))
     conn.commit()
-
-    bot.send_message(user_id, "✅ You have been registered for the webinar!")
-
     cursor.close()
     conn.close()
 
-def main():
-    print("Bot is polling...")
-    bot.polling(none_stop=True)
+scheduler = BackgroundScheduler()
+scheduler.add_job(send_reminders, 'interval', minutes=1)
+scheduler.start()
 
-if __name__ == "__main__":
-    main()
+bot.polling(none_stop=True)
