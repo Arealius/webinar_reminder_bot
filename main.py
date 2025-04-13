@@ -1,39 +1,57 @@
 import os
-import re
-import time
+from requests import get
 import logging
-from telebot import TeleBot, types
-from apscheduler.schedulers.background import BackgroundScheduler
-from database_config import mydb, api_token
+import time
+import telebot
+from telebot import types
+import mysql.connector
+import matplotlib.pyplot as plt
+import re
+from database_config import get_db_cursor, api_token
 
-bot = TeleBot(api_token)
+API_TOKEN = api_token
 
-def get_db_cursor():
-    connection = mydb
-    return connection, connection.cursor(buffered=True)
+categories = {
+    "Birthday": 1,
+    "Anniversary": 2,
+    "Meeting": 3,
+    "Task": 4,
+    "Other": 5
+}
+
+categoryId = 0
+date = ''
+time_string = ''
+reminder_text = ''
+user_id = 0
+
+bot = telebot.TeleBot(API_TOKEN)
 
 @bot.message_handler(commands=['start'])
-def send_welcome(message):
+def Send_Welcome(message):
+    global user_id
+    user_id = message.chat.id
     conn, cursor = get_db_cursor()
-    user_id = message.from_user.id
-    username = message.from_user.username or ""
-    
-    cursor.execute("INSERT INTO users (user_id, username) VALUES (%s, %s) ON DUPLICATE KEY UPDATE username=%s", (user_id, username, username))
-    conn.commit()
-    bot.reply_to(message, "✅ You are registered for the webinar!")
 
-# Пример уведомления (можно адаптировать под время вебинара)
-def send_reminders():
-    conn, cursor = get_db_cursor()
-    cursor.execute("SELECT user_id FROM users")
-    for (user_id,) in cursor.fetchall():
-        bot.send_message(user_id, "⏰ Reminder: The webinar starts in 30 minutes!")
+    username = message.chat.username or ""
+
+    query = """
+        INSERT INTO users (user_id, username)
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE username=%s
+    """
+    val = (user_id, username, username)
+    cursor.execute(query, val)
+    conn.commit()
+
+    bot.send_message(user_id, "✅ You have been registered for the webinar!")
+
+    cursor.close()
     conn.close()
 
-# Планировщик уведомлений (можно настроить на нужное время)
-scheduler = BackgroundScheduler()
-# scheduler.add_job(send_reminders, 'date', run_date='2025-04-13 18:00:00')  # Пример
-scheduler.start()
+def main():
+    print("Bot is polling...")
+    bot.polling(none_stop=True)
 
-# ВАЖНО: запуск бота
-bot.infinity_polling()
+if __name__ == "__main__":
+    main()
