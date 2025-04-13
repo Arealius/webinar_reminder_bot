@@ -7,7 +7,7 @@ from telebot import types
 import mysql.connector
 import matplotlib.pyplot as plt
 import re
-from database_config import get_db_cursor, api_token
+from database_config import get_db_cursor, API_TOKEN
 
 API_TOKEN = api_token
 
